@@ -1,0 +1,9 @@
+{
+  "profiles": {
+    "Mentions.Twitter": {
+      "commandName": "Project",
+      "commandLineArgs": "--port 7018",
+      "launchBrowser": false
+    }
+  }
+}
