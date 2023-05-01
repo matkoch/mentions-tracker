@@ -10,20 +10,14 @@ namespace Mentions.Reddit;
 
 public class Functions
 {
-    public Functions(Configuration configuration)
-    {
-        Keywords = configuration.Keywords;
-        Subreddits = configuration.Subreddits;
-        Exclusions = configuration.Exclusions;
-        KnownUsers = configuration.KnownUsers;
-        SlackWebhook = configuration.SlackWebhook;
-    }
+    private readonly Configuration _configuration;
+    private readonly SlackClient _slackClient;
 
-    public string[] Keywords { get; }
-    public string[] Subreddits { get; }
-    public string[] Exclusions { get; }
-    public string[] KnownUsers { get; }
-    public string SlackWebhook { get; }
+    public Functions(Configuration configuration, SlackClient slackClient)
+    {
+        _configuration = configuration;
+        _slackClient = slackClient;
+    }
 
     public const string Minutes = "15";
 
@@ -46,7 +40,7 @@ public class Functions
             : DateTimeOffset.UtcNow.Subtract(scheduleMinutes);
         var after = before.Subtract(scheduleMinutes);
 
-        foreach (var keyword in Keywords)
+        foreach (var keyword in _configuration.Keywords)
         {
             var search = new Search
             {
@@ -69,7 +63,7 @@ public class Functions
             {
                 Color = SlackClient.GetColor(
                     root: post.IsSubmission,
-                    knownUser: KnownUsers.Contains(post.Author, StringComparer.InvariantCultureIgnoreCase)),
+                    knownUser: _configuration.KnownUsers.Contains(post.Author, StringComparer.InvariantCultureIgnoreCase)),
                 AuthorName = post.Title,
                 AuthorSubname = $"u/{post.Author}",
                 AuthorIcon = post.AuthorIconUrl,
@@ -83,7 +77,7 @@ public class Functions
 
         var posts = await RedditClient.Search(
             new[] { search.Keyword },
-            Subreddits,
+            _configuration.Subreddits,
             search.After.ToUnixTimeSeconds(),
             search.Before.ToUnixTimeSeconds());
 
@@ -97,6 +91,6 @@ public class Functions
     [FunctionName(nameof(PostSlack))]
     public async Task PostSlack([QueueTrigger(nameof(SlackAttachment))] SlackAttachment attachment)
     {
-        await SlackClient.Post(attachment, SlackWebhook);
+        await _slackClient.Post(attachment);
     }
 }

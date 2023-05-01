@@ -4,13 +4,14 @@ using System.Linq;
 using System.Threading.Tasks;
 using Flurl;
 using Flurl.Http;
+using Mentions.Common;
 using Newtonsoft.Json.Linq;
 
 namespace Mentions.Reddit;
 
 public static class RedditClient
 {
-    public const string ApiUrl = "https://api.pushshift.io/reddit";
+    public const string ApiBaseUrl = "https://api.pushshift.io/reddit";
 
     private const string TitleUnavailable = "[Title Unavailable]";
 
@@ -21,15 +22,15 @@ public static class RedditClient
         long before)
     {
         async Task<RedditPost[]> GetPosts(string kind)
-            => (await ApiUrl.AppendPathSegments(kind, "search")
-                .SetQueryParam("q", string.Join("%20", keywords))
-                .SetQueryParam("subreddit", string.Join(",", subreddits))
+            => (await ApiBaseUrl.AppendPathSegments(kind, "search")
+                .SetQueryParam("q", keywords.Join("%20"))
+                .SetQueryParam("subreddit", subreddits.Join(","))
                 .SetQueryParam("after", after)
                 .SetQueryParam("before", before)
                 .GetJsonAsync<RedditResponse>()).Data;
 
         async Task<string> GetTitle(RedditPost post)
-            => (await ApiUrl.AppendPathSegments("submission", "search")
+            => (await ApiBaseUrl.AppendPathSegments("submission", "search")
                 .SetQueryParam("ids", post.LinkId[3..])
                 .GetJsonAsync<RedditResponse>()).Data.SingleOrDefault()?.Title;
 

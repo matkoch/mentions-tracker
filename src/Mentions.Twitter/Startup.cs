@@ -1,8 +1,10 @@
 using System.IO;
+using Mentions.Common;
 using Mentions.Reddit;
 using Microsoft.Azure.Functions.Extensions.DependencyInjection;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Tweetinvi;
 
 [assembly: FunctionsStartup(typeof(Startup))]
 
@@ -13,11 +15,6 @@ public class Configuration
     public string[] Keywords;
     public string[] Exclusions;
     public string[] KnownUsers;
-    public string TwitterConsumerKey;
-    public string TwitterConsumerSecret;
-    public string TwitterAccessToken;
-    public string TwitterAccessTokenSecret;
-    public string SlackWebhook;
 }
 
 public class Startup : FunctionsStartup
@@ -37,12 +34,22 @@ public class Startup : FunctionsStartup
             {
                 Keywords = config[nameof(Configuration.Keywords)].Split(","),
                 Exclusions = config[nameof(Configuration.Exclusions)].Split(","),
-                KnownUsers = config[nameof(Configuration.KnownUsers)].Split(","),
-                TwitterConsumerKey = config[nameof(Configuration.TwitterConsumerKey)],
-                TwitterConsumerSecret = config[nameof(Configuration.TwitterConsumerSecret)],
-                TwitterAccessToken = config[nameof(Configuration.TwitterAccessToken)],
-                TwitterAccessTokenSecret = config[nameof(Configuration.TwitterAccessTokenSecret)],
-                SlackWebhook = config[nameof(Configuration.SlackWebhook)]
+                KnownUsers = config[nameof(Configuration.KnownUsers)].Split(",")
             });
+
+        builder.Services.AddSingleton(_ =>
+            new TwitterClient(
+                config["TwitterConsumerKey"],
+                config["TwitterConsumerSecret"],
+                config["TwitterConsumerAccessToken"],
+                config["TwitterConsumerAccessTokenSecret"]));
+
+        builder.Services.AddSingleton(_ =>
+            new SlackClient(config["SlackWebhook"]));
+
+        builder.Services.AddSingleton(_ =>
+            new TranslationClient(
+                config["TranslationsSubscriptionRegion"],
+                config["TranslationsSubscriptionKey"]));
     }
 }

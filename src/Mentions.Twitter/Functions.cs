@@ -14,12 +14,22 @@ namespace Mentions.Twitter;
 
 public class Functions
 {
-    public Functions(Configuration configuration)
-    {
-        Configuration = configuration;
-    }
+    private readonly Configuration _configuration;
+    private readonly TwitterClient _twitterClient;
+    private readonly TranslationClient _translationClient;
+    private readonly SlackClient _slackClient;
 
-    public Configuration Configuration { get; }
+    public Functions(
+        Configuration configuration,
+        TwitterClient twitterClient,
+        TranslationClient translationClient,
+        SlackClient slackClient)
+    {
+        _configuration = configuration;
+        _twitterClient = twitterClient;
+        _translationClient = translationClient;
+        _slackClient = slackClient;
+    }
 
     public const string Minutes = "15";
 
@@ -35,37 +45,31 @@ public class Functions
             : DateTimeOffset.UtcNow.Subtract(scheduleMinutes);
         var after = before.Subtract(scheduleMinutes);
 
-        var twitterClient = new TwitterClient(
-            consumerKey: Configuration.TwitterConsumerKey,
-            consumerSecret: Configuration.TwitterConsumerSecret,
-            accessToken: Configuration.TwitterAccessToken,
-            accessSecret: Configuration.TwitterAccessTokenSecret);
-
-        var tweets = await twitterClient.Search.SearchTweetsAsync(new SearchTweetsParameters(string.Empty)
+        var tweets = await _twitterClient.Search.SearchTweetsAsync(new SearchTweetsParameters(string.Empty)
         {
-            Query = Configuration.Keywords.Single(),
+            Query = _configuration.Keywords.Single(),
             Since = after.UtcDateTime,
             Until = before.UtcDateTime
         });
 
         string GetUserLink(IUserMentionEntity x) => $"*<https://twitter.com/{x.ScreenName}|@{x.ScreenName}>*";
 
-        SlackAttachment CreateAttachment(ITweet tweet)
+        async Task<SlackAttachment> CreateAttachment(ITweet tweet)
         {
             return new SlackAttachment
             {
                 Color = SlackClient.GetColor(
                     root: tweet.InReplyToStatusId == null,
-                    knownUser: Configuration.KnownUsers.Contains(tweet.CreatedBy.ScreenName,
+                    knownUser: _configuration.KnownUsers.Contains(tweet.CreatedBy.ScreenName,
                         StringComparer.OrdinalIgnoreCase)),
                 AuthorName = tweet.CreatedBy.Name,
                 AuthorSubname = $"@{tweet.CreatedBy.ScreenName}",
                 AuthorIcon = tweet.CreatedBy.ProfileImageUrl400x400,
                 AuthorLink = tweet.Url,
                 ImageUrl = tweet.Media.FirstOrDefault()?.MediaURLHttps,
-                Text = tweet.Text,
+                Text = (await _translationClient.Translate(tweet.Text) ?? tweet.Text).VisualizeProducts(),
                 Footer = tweet.InReplyToStatusId != null
-                    ? $"Replied to {string.Join(", ", tweet.UserMentions.Select(GetUserLink))}"
+                    ? $"Replied to {tweet.UserMentions.Select(GetUserLink).Join(", ")}"
                     : null,
                 FooterIcon = "https://raw.githubusercontent.com/matkoch/mentions-tracker/main/images/twitter.png",
                 Ts = tweet.CreatedAt.ToUnixTimeSeconds()
@@ -74,7 +78,7 @@ public class Functions
 
         foreach (var tweet in tweets.OrderBy(x => x.CreatedAt))
         {
-            var attachment = CreateAttachment(tweet);
+            var attachment = await CreateAttachment(tweet);
             await attachmentCollector.AddAsync(attachment);
         }
     }
@@ -82,6 +86,6 @@ public class Functions
     [FunctionName(nameof(PostSlack))]
     public async Task PostSlack([QueueTrigger(nameof(SlackAttachment))] SlackAttachment attachment)
     {
-        await SlackClient.Post(attachment, Configuration.SlackWebhook);
+        await _slackClient.Post(attachment);
     }
 }

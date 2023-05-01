@@ -1,4 +1,5 @@
 using System.IO;
+using Mentions.Common;
 using Mentions.Reddit;
 using Microsoft.Azure.Functions.Extensions.DependencyInjection;
 using Microsoft.Extensions.Configuration;
@@ -35,8 +36,10 @@ public class Startup : FunctionsStartup
                 Keywords = config[nameof(Configuration.Keywords)].Split(","),
                 Subreddits = config[nameof(Configuration.Subreddits)].Split(","),
                 Exclusions = config[nameof(Configuration.Exclusions)].Split(","),
-                KnownUsers = config[nameof(Configuration.KnownUsers)].Split(","),
-                SlackWebhook = config[nameof(Configuration.SlackWebhook)]
+                KnownUsers = config[nameof(Configuration.KnownUsers)].Split(",")
             });
+
+        builder.Services.AddSingleton(_ =>
+            new SlackClient(config["SlackWebhook"]));
     }
 }

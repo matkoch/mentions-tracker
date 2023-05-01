@@ -12,6 +12,11 @@ public static class Extensions
         return new DateTimeOffset(dateTime);
     }
 
+    public static string Join(this IEnumerable<string> values, string separator)
+    {
+        return string.Join(separator, values);
+    }
+
     public static string VisualizeProducts(this string text)
         => new Dictionary<string, string>
         {

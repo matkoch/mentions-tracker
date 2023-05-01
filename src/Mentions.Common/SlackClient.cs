@@ -4,23 +4,24 @@ using Flurl.Http;
 
 namespace Mentions.Common;
 
-public static class SlackClient
+public class SlackClient
 {
-    public static async Task Post(SlackAttachment attachment, string webhook)
+    private readonly string _webhook;
+
+    public SlackClient(string webhook)
     {
-        var response = await webhook
+        _webhook = webhook;
+    }
+
+    public async Task Post(SlackAttachment attachment)
+    {
+        var response = await _webhook
             .PostJsonAsync(new { attachments = new[] { attachment } })
             .ReceiveString();
 
         if (response != "ok")
             throw new Exception(response);
     }
-
-    public const string MegaphoneUrl = "https://em-content.zobj.net/thumbs/320/twitter/322/megaphone_1f4e3.png";
-    public const string SpeechBalloonUrl = "https://em-content.zobj.net/thumbs/320/twitter/322/speech-balloon_1f4ac.png";
-
-    public static string GetIcon(bool root)
-        => root ? MegaphoneUrl : SpeechBalloonUrl;
 
     public static string GetColor(bool root, bool knownUser)
         => (root, knownUser) switch
