@@ -1,12 +1,35 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
 
 namespace Mentions.Common;
 
 public static class Extensions
 {
+    public static T NotNull<T>(
+        this T obj,
+        string message = null,
+        [CallerArgumentExpression("obj")]
+        string argumentExpression = null)
+        where T : class
+    {
+        if (obj == null)
+        {
+            throw new ArgumentException(
+                message ?? $"Expected object of type '{typeof(T).FullName}' to be not null",
+                message == null ? argumentExpression : null);
+        }
+
+        return obj;
+    }
+
+    public static string MarkdownQuote(this string str)
+    {
+        return str.Split(Environment.NewLine).Select(x => $"> {x}").Join(Environment.NewLine);
+    }
+
     public static DateTimeOffset ToDateTimeOffset(this DateTime dateTime)
     {
         return new DateTimeOffset(dateTime);

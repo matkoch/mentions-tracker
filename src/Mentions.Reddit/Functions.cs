@@ -84,13 +84,14 @@ public class Functions
         foreach (var post in posts)
         {
             var attachment = CreateAttachment(post);
-            await attachmentCollector.AddAsync(attachment);
+            await _slackClient.Post(attachment);
+            // await attachmentCollector.AddAsync(attachment);
         }
     }
 
-    [FunctionName(nameof(PostSlack))]
-    public async Task PostSlack([QueueTrigger(nameof(SlackAttachment))] SlackAttachment attachment)
-    {
-        await _slackClient.Post(attachment);
-    }
+    // [FunctionName(nameof(PostSlack))]
+    // public async Task PostSlack([QueueTrigger(nameof(SlackAttachment))] SlackAttachment attachment)
+    // {
+    //     await _slackClient.Post(attachment);
+    // }
 }

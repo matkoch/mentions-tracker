@@ -21,23 +21,29 @@ public class TranslationClient
 
     public async Task<string> Translate(string text)
     {
-        var detect = await _client.Request("detect")
-            .SetQueryParam("api-version", "3.0")
-            .PostJsonAsync(new[] { new { Text = text } })
-            .ReceiveJson<JArray>();
+        try
+        {
+            var detect = await _client.Request("detect")
+                .SetQueryParam("api-version", "3.0")
+                .PostJsonAsync(new[] { new { Text = text } })
+                .ReceiveJson<JArray>();
 
-        if (detect[0]["language"]!.ToString() == "en")
-            return null;
+            if (detect[0]["language"]!.ToString() == "en")
+                return text;
 
-        var translate = await _client.Request("translate")
-            .SetQueryParam("api-version", "3.0")
-            .SetQueryParam("to", "en")
-            .PostJsonAsync(new[] { new { Text = text } })
-            .ReceiveJson<JArray>();
+            var translate = await _client.Request("translate")
+                .SetQueryParam("api-version", "3.0")
+                .SetQueryParam("to", "en")
+                .PostJsonAsync(new[] { new { Text = text } })
+                .ReceiveJson<JArray>();
 
-        var translation = translate[0]["translations"]![0]!["text"]!.ToString();
+            var translation = translate[0]["translations"]![0]!["text"]!.ToString();
 
-        return text + Environment.NewLine +
-               translation.Split(Environment.NewLine).Select(x => $"> {x}").Join(Environment.NewLine);
+            return text + Environment.NewLine + translation.MarkdownQuote();
+        }
+        catch
+        {
+            return text;
+        }
     }
 }

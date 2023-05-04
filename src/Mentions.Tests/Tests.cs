@@ -39,10 +39,10 @@ public class Tests
     public async Task RedditClientTest()
     {
         var before = DateTimeOffset.UtcNow.Subtract(TimeSpan.FromHours(1));
-        var after = before.Subtract(TimeSpan.FromHours(5));
+        var after = before.Subtract(TimeSpan.FromHours(10));
 
         var posts = await RedditClient.Search(
-            new[] { "rider" },
+            new[] { "dotnet" },
             new[] { "csharp", "dotnet" },
             after: after.ToUnixTimeSeconds(),
             before: before.ToUnixTimeSeconds());

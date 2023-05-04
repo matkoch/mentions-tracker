@@ -26,8 +26,8 @@ public class SlackClient
     public static string GetColor(bool root, bool knownUser)
         => (root, knownUser) switch
         {
-            (_, true) => "#F3BA00",
-            (true, _) => "#00ACC1",
-            _ => null
+            (_, true) => null,
+            (true, _) => "#F3BA00",
+            (false, _) => "#00ACC1"
         };
 }

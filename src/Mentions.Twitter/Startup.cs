@@ -1,20 +1,44 @@
+using System;
 using System.IO;
+using System.Linq;
+using System.Text;
 using Mentions.Common;
-using Mentions.Reddit;
+using Mentions.Twitter;
 using Microsoft.Azure.Functions.Extensions.DependencyInjection;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Newtonsoft.Json;
 using Tweetinvi;
 
 [assembly: FunctionsStartup(typeof(Startup))]
 
-namespace Mentions.Reddit;
+namespace Mentions.Twitter;
 
 public class Configuration
 {
+    public string[] KnownUsers;
+    public Search[] Searches;
+}
+
+public class Search
+{
+    public int Id => Keywords.Join(",").GetHashCode();
     public string[] Keywords;
     public string[] Exclusions;
-    public string[] KnownUsers;
+    public string SlackWebhook;
+}
+
+public class TwitterCredentials
+{
+    public string ConsumerKey;
+    public string ConsumerSecret;
+    public string AccessToken;
+    public string AccessTokenSecret;
+}
+public class TranslationCredentials
+{
+    public string SubscriptionKey;
+    public string SubscriptionRegion;
 }
 
 public class Startup : FunctionsStartup
@@ -29,27 +53,28 @@ public class Startup : FunctionsStartup
 
         builder.Services.AddHttpClient("Default");
 
-        builder.Services.AddSingleton(_ =>
-            new Configuration
-            {
-                Keywords = config[nameof(Configuration.Keywords)].Split(","),
-                Exclusions = config[nameof(Configuration.Exclusions)].Split(","),
-                KnownUsers = config[nameof(Configuration.KnownUsers)].Split(",")
-            });
+        T GetConfigEntry<T>()
+        {
+            var jwt = config[typeof(T).Name];
+            var json = Encoding.UTF8.GetString(Convert.FromBase64String(jwt));
+            return JsonConvert.DeserializeObject<T>(json);
+        }
+
+        var configuration = GetConfigEntry<Configuration>();
+        var twitterCredentials = GetConfigEntry<TwitterCredentials>();
+        var translationCredentials = GetConfigEntry<TranslationCredentials>();
+        builder.Services.AddSingleton(_ => configuration);
 
         builder.Services.AddSingleton(_ =>
             new TwitterClient(
-                config["TwitterConsumerKey"],
-                config["TwitterConsumerSecret"],
-                config["TwitterConsumerAccessToken"],
-                config["TwitterConsumerAccessTokenSecret"]));
-
-        builder.Services.AddSingleton(_ =>
-            new SlackClient(config["SlackWebhook"]));
+                twitterCredentials.ConsumerKey.NotNull(),
+                twitterCredentials.ConsumerSecret.NotNull(),
+                twitterCredentials.AccessToken.NotNull(),
+                twitterCredentials.AccessTokenSecret.NotNull()));
 
         builder.Services.AddSingleton(_ =>
             new TranslationClient(
-                config["TranslationsSubscriptionRegion"],
-                config["TranslationsSubscriptionKey"]));
+                translationCredentials.SubscriptionRegion.NotNull(),
+                translationCredentials.SubscriptionKey.NotNull()));
     }
 }
