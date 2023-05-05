@@ -26,6 +26,9 @@ public class Search
     public string[] Keywords;
     public string[] Exclusions;
     public string SlackWebhook;
+    public string SpaceUrl;
+    public string SpaceToken;
+    public string SpaceChannel;
 }
 
 public class TwitterCredentials
