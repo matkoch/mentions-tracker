@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Azure.Storage.Queues;
+using JetBrains.Space.Client;
+using JetBrains.Space.Common;
 using Mentions.Common;
 using Microsoft.Azure.WebJobs;
 using Microsoft.Extensions.Logging;
@@ -82,7 +84,6 @@ public class Functions
 
         UserV2 GetUser(string id) => users.NotNull().Single(x => x.Id == id);
         MediaV2 GetMedia(string mediaKey) => media.NotNull().Single(x => x.MediaKey == mediaKey);
-        string GetUserLink(string username) => $"*<https://twitter.com/{username}|@{username}>*";
 
         async Task<string> GetText(TweetV2 tweet)
         {
@@ -107,6 +108,8 @@ public class Functions
 
         async Task<SlackAttachment> CreateAttachment(TweetV2 tweet)
         {
+            string GetUserLink(string username) => $"*<https://twitter.com/{username}|@{username}>*";
+
             var user = GetUser(tweet.AuthorId);
 
             return new SlackAttachment
@@ -130,15 +133,75 @@ public class Functions
             };
         }
 
-        var slackClient = new SlackClient(search.SlackWebhook);
+        async Task<ChatMessageBlock> CreateBlock(TweetV2 tweet)
+        {
+            string GetUserLink(string username) => $"[@{username}](https://twitter.com/{username})";
+
+            var user = GetUser(tweet.AuthorId);
+            var imageUrl = tweet.Attachments?.MediaKeys.Select(GetMedia).FirstOrDefault()?.Url;
+
+            return ChatMessage.Block(
+                sections: new()
+                {
+                    MessageSectionElement.MessageSection(
+                        elements: new()
+                        {
+                            MessageBlockElement.MessageText(
+                                $"[{user.Name} | @{user.Username}](https://twitter.com/{user.Username}/status/{tweet.Id})",
+                                accessory: MessageAccessoryElement.MessageIcon(
+                                    new ApiIcon("twitter"),
+                                    MessageStyle.PRIMARY)),
+                            MessageBlockElement.MessageText(
+                                content: (await GetText(tweet)).VisualizeProducts(),
+                                accessory: imageUrl != null && !tweet.PossiblySensitive
+                                    ? MessageAccessoryElement.MessageImage(imageUrl)
+                                    : null),
+                            MessageBlockElement.MessageText(
+                                content: tweet.InReplyToUserId != null
+                                    ? $"Replied to {tweet.Entities.Mentions.Select(x => GetUserLink(x.Username)).Join(", ")}"
+                                    : "Started conversation",
+                                size: MessageTextSize.SMALL)
+                            // TODO: mobile app doesn't support inline groups
+                            // MessageBlockElement.MessageInlineGroup(
+                            //     new List<MessageInlineElement>
+                            //     {
+                            //         MessageInlineElement.MessageInlineText(
+                            //             text: tweet.InReplyToUserId != null
+                            //                 ? $"Replied to {tweet.Entities.Mentions.Select(x => GetUserLink(x.Username)).Join(", ")}"
+                            //                 : "Started conversation"),
+                            //         MessageInlineElement.MessageTimestamp(
+                            //             ts: tweet.CreatedAt.ToUnixTimeSeconds(),
+                            //             strikethrough: false)
+                            //     },
+                            //     textSize: MessageTextSize.SMALL),
+                        })
+                },
+                style: _configuration.KnownUsers.Contains(user.Username, StringComparer.OrdinalIgnoreCase)
+                    ? MessageStyle.SECONDARY
+                    : tweet.InReplyToUserId == null
+                        ? MessageStyle.WARNING
+                        : MessageStyle.PRIMARY);
+        }
+
+        var slackClient = search.SlackWebhook != null ? new SlackClient(search.SlackWebhook) : null;
+        var spaceClient = search.SpaceToken != null
+            ? new ChatClient(new BearerTokenConnection(new Uri(search.SpaceUrl.NotNull()),
+                new AuthenticationTokens(search.SpaceToken)))
+            : null;
+
         foreach (var tweet in tweets)
         {
             if (tweet.ReferencedTweets?.Any(x => x.Type == "retweeted") ?? false)
                 continue;
 
-            var attachment = await CreateAttachment(tweet);
-            await slackClient.Post(attachment);
-            // await attachmentCollector.AddAsync(attachment);
+            await (spaceClient?.Messages.SendMessageAsync(
+                       recipient: MessageRecipient.Channel(ChatChannel.FromName(search.SpaceChannel)),
+                       content: await CreateBlock(tweet),
+                       unfurlLinks: false)
+                   ?? Task.CompletedTask);
+
+            await (slackClient?.Post(await CreateAttachment(tweet))
+                   ?? Task.CompletedTask);
         }
     }
 
@@ -171,10 +234,4 @@ public class Functions
         var state = stateJson != null ? JsonConvert.DeserializeObject<State>(stateJson) : new State();
         return state;
     }
-
-    // [FunctionName(nameof(PostSlack))]
-    // public async Task PostSlack([QueueTrigger(nameof(SlackAttachment))] SlackAttachment attachment)
-    // {
-    //     await _slackClient.Post(attachment);
-    // }
 }
