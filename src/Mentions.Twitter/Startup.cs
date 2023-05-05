@@ -22,7 +22,7 @@ public class Configuration
 
 public class Search
 {
-    public int Id => Keywords.Join(",").GetHashCode();
+    public string Name;
     public string[] Keywords;
     public string[] Exclusions;
     public string SlackWebhook;

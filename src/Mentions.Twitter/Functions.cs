@@ -15,8 +15,8 @@ namespace Mentions.Twitter;
 
 public class State
 {
-    public int LastSearch;
-    public Dictionary<int, string> SearchSinceIds = new();
+    public string LastSearch;
+    public Dictionary<string, string> SearchSinceIds = new();
 }
 
 public class Functions
@@ -44,14 +44,15 @@ public class Functions
         [Queue(nameof(State))] QueueClient queueClient,
         ILogger log)
     {
-        var state = await GetState(queueClient);
+        var state = await LoadState(queueClient, log);
 
-        var searchIndex = (state.LastSearch + 1) % _configuration.Searches.Length;
+        var lastSearchIndex = _configuration.Searches.Select(x => x.Name).ToList().IndexOf(state.LastSearch);
+        var searchIndex = (lastSearchIndex + 1) % _configuration.Searches.Length;
         var search = _configuration.Searches.ElementAtOrDefault(searchIndex);
         if (search == null)
             return;
 
-        var sinceId = state.SearchSinceIds.GetValueOrDefault(search.Id);
+        var sinceId = state.SearchSinceIds.GetValueOrDefault(search.Name);
 
         var searchParameters = new SearchTweetsV2Parameters(string.Empty)
         {
@@ -64,9 +65,8 @@ public class Functions
             // NOTE: this seems to be an issue
             // EndTime = before.UtcDateTime
         };
-        log.LogWarning("Performing search #{Index} with '{Keywords}' after {StartTime} / {SinceId}",
-            searchIndex,
-            searchParameters.Query,
+        log.LogWarning("Performing search {Name} with after {StartTime} / {SinceId}",
+            search.Name,
             searchParameters.StartTime,
             searchParameters.SinceId);
         var tweetSearch = await _twitterClient.SearchV2.SearchTweetsAsync(searchParameters);
@@ -75,7 +75,7 @@ public class Functions
         var users = tweetSearch.Includes?.Users;
         var media = tweetSearch.Includes?.Media;
 
-        await SaveState(queueClient, state, searchIndex, search, newSinceId: tweets.LastOrDefault()?.Id ?? sinceId);
+        await SaveState(queueClient, state, search, newSinceId: tweets.LastOrDefault()?.Id ?? sinceId, log);
 
         if (tweets.Count == 0)
             return;
@@ -145,26 +145,29 @@ public class Functions
     private async Task SaveState(
         QueueClient queueClient,
         State state,
-        int searchIndex,
         Search search,
-        string newSinceId)
+        string newSinceId,
+        ILogger logger)
     {
         await queueClient.ClearMessagesAsync();
 
-        state.LastSearch = searchIndex;
+        state.LastSearch = search.Name;
         state.SearchSinceIds = _configuration.Searches
             .ToDictionary(
-                x => x.Id,
-                x => x.Id == search.Id
+                x => x.Name,
+                x => x.Name == search.Name
                     ? newSinceId
-                    : state.SearchSinceIds.GetValueOrDefault(x.Id));
+                    : state.SearchSinceIds.GetValueOrDefault(x.Name));
 
-        await queueClient.SendMessageAsync(JsonConvert.SerializeObject(state));
+        var stateJson = JsonConvert.SerializeObject(state);
+        logger.LogWarning("Saving state: {State}", stateJson);
+        await queueClient.SendMessageAsync(stateJson);
     }
 
-    private static async Task<State> GetState(QueueClient queueClient)
+    private static async Task<State> LoadState(QueueClient queueClient, ILogger logger)
     {
         var stateJson = (await queueClient.PeekMessagesAsync()).Value.FirstOrDefault()?.MessageText;
+        logger.LogWarning("Loading state: {State}", stateJson ?? "<null>");
         var state = stateJson != null ? JsonConvert.DeserializeObject<State>(stateJson) : new State();
         return state;
     }
